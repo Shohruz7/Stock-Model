@@ -4,9 +4,15 @@ Basic tests for feature computation.
 This is a placeholder - will be expanded in next iteration.
 """
 
+import sys
+from pathlib import Path
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
 import pandas as pd
 import pytest
-from src.features import compute_features, get_feature_names
+from features import compute_features, get_feature_names
 
 
 def test_get_feature_names():
