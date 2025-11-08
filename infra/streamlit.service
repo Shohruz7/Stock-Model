@@ -1,0 +1,19 @@
+[Unit]
+Description=Stock Trend Predictor Streamlit App
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/stock-trend-mvp
+Environment="PATH=/home/ubuntu/stock-trend-mvp/venv/bin"
+Environment="STREAMLIT_PORT=8501"
+ExecStart=/home/ubuntu/stock-trend-mvp/venv/bin/streamlit run app/streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/stock-trend/streamlit.log
+StandardError=append:/var/log/stock-trend/streamlit.error.log
+
+[Install]
+WantedBy=multi-user.target
+
