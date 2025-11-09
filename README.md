@@ -62,6 +62,13 @@ python src/data_fetch.py --tickers-file tickers.txt --start 2018-01-01 --end 202
 ```bash
 # Train model on processed data
 python src/train.py --data data/AAPL-2018-01-01-2024-12-31.csv --out models/
+
+# Train and upload to S3
+python src/train.py \
+    --data data/AAPL-2018-01-01-2024-12-31.csv \
+    --out models/ \
+    --s3-bucket my-stock-models \
+    --s3-key models/production.joblib
 ```
 
 ### Running Streamlit App
@@ -71,6 +78,13 @@ streamlit run app/streamlit_app.py
 ```
 
 The app will be available at `http://localhost:8501`
+
+**Features:**
+- Load models from local files or S3
+- Download stock data for any ticker
+- View historical price charts
+- See computed features
+- Make next-day predictions with probabilities
 
 ## AWS Deployment
 

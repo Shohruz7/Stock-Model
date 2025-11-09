@@ -22,9 +22,18 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pandas as pd
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+
+# Try to import XGBoost, but don't fail if it's not available
+XGBOOST_AVAILABLE = False
+try:
+    import xgboost as xgb
+    XGBOOST_AVAILABLE = True
+except (ImportError, Exception):
+    XGBOOST_AVAILABLE = False
 
 from features import compute_features, get_feature_names
 from model_utils import (
@@ -40,8 +49,9 @@ def train_model(
     s3_bucket: Optional[str] = None,
     s3_key: Optional[str] = None,
     test_size: float = 0.2,
-    n_estimators: int = 100,
+    n_estimators: int = 200,
     random_state: int = 42,
+    tune_hyperparameters: bool = True,
 ) -> dict:
     """
     Train RandomForestClassifier model on stock data.
@@ -101,15 +111,108 @@ def train_model(
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
-    # Train model
-    print(f"Training RandomForestClassifier (n_estimators={n_estimators})...")
-    model = RandomForestClassifier(
-        n_estimators=n_estimators,
-        random_state=random_state,
-        n_jobs=-1,
-        verbose=0,
-    )
-    model.fit(X_train_scaled, y_train)
+    # Train model with hyperparameter tuning
+    if tune_hyperparameters and XGBOOST_AVAILABLE:
+        print("Tuning XGBoost hyperparameters with RandomizedSearchCV...")
+        param_grid = {
+            "n_estimators": [200, 300, 500],
+            "max_depth": [3, 5, 7, 10],
+            "learning_rate": [0.01, 0.05, 0.1],
+            "subsample": [0.8, 0.9, 1.0],
+            "colsample_bytree": [0.8, 0.9, 1.0],
+            "min_child_weight": [1, 3, 5],
+            "gamma": [0, 0.1, 0.2],
+        }
+        
+        base_model = xgb.XGBClassifier(
+            random_state=random_state,
+            n_jobs=-1,
+            eval_metric="logloss",
+            use_label_encoder=False,
+        )
+        
+        # Use RandomizedSearchCV for faster tuning
+        search = RandomizedSearchCV(
+            base_model,
+            param_grid,
+            n_iter=30,  # Try 30 random combinations
+            cv=3,
+            scoring="accuracy",
+            n_jobs=-1,
+            random_state=random_state,
+            verbose=1,
+        )
+        
+        search.fit(X_train_scaled, y_train)
+        model = search.best_estimator_
+        
+        print(f"\nBest parameters: {search.best_params_}")
+        print(f"Best CV score: {search.best_score_:.4f}")
+    elif tune_hyperparameters:
+        print("Tuning RandomForest hyperparameters with RandomizedSearchCV...")
+        param_grid = {
+            "n_estimators": [300, 500, 700],
+            "max_depth": [8, 10, 12, 15],
+            "min_samples_split": [5, 10, 15],
+            "min_samples_leaf": [2, 4, 6],
+            "max_features": ["sqrt", "log2"],
+            "class_weight": ["balanced"],
+            "max_samples": [0.7, 0.8, 0.9],
+        }
+        
+        base_model = RandomForestClassifier(
+            random_state=random_state,
+            n_jobs=-1,
+            verbose=0,
+        )
+        
+        # Use RandomizedSearchCV for faster tuning
+        search = RandomizedSearchCV(
+            base_model,
+            param_grid,
+            n_iter=30,  # Try 30 random combinations
+            cv=3,
+            scoring="accuracy",
+            n_jobs=-1,
+            random_state=random_state,
+            verbose=1,
+        )
+        
+        search.fit(X_train_scaled, y_train)
+        model = search.best_estimator_
+        
+        print(f"\nBest parameters: {search.best_params_}")
+        print(f"Best CV score: {search.best_score_:.4f}")
+    else:
+        if XGBOOST_AVAILABLE:
+            print(f"Training XGBoostClassifier (n_estimators={n_estimators})...")
+            model = xgb.XGBClassifier(
+                n_estimators=n_estimators,
+                max_depth=5,
+                learning_rate=0.05,
+                subsample=0.9,
+                colsample_bytree=0.9,
+                min_child_weight=3,
+                random_state=random_state,
+                n_jobs=-1,
+                eval_metric="logloss",
+                use_label_encoder=False,
+            )
+        else:
+            print(f"Training RandomForestClassifier (n_estimators={n_estimators})...")
+            # Optimized settings for better generalization
+            model = RandomForestClassifier(
+                n_estimators=n_estimators,
+                max_depth=15,
+                min_samples_split=5,
+                min_samples_leaf=2,
+                max_features="sqrt",
+                class_weight="balanced",
+                random_state=random_state,
+                n_jobs=-1,
+                verbose=0,
+            )
+        model.fit(X_train_scaled, y_train)
 
     # Evaluate model
     print("Evaluating model...")
@@ -236,6 +339,11 @@ def main():
         default=42,
         help="Random seed for reproducibility (default: 42)",
     )
+    parser.add_argument(
+        "--no-tune",
+        action="store_true",
+        help="Disable hyperparameter tuning (faster but less accurate)",
+    )
 
     args = parser.parse_args()
 
@@ -248,6 +356,7 @@ def main():
         test_size=args.test_size,
         n_estimators=args.n_estimators,
         random_state=args.random_state,
+        tune_hyperparameters=not args.no_tune,
     )
 
     print(f"\n✅ Training complete!")
