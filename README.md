@@ -71,6 +71,24 @@ python src/train.py \
     --s3-key models/production.joblib
 ```
 
+### Backtesting
+
+```bash
+# Backtest a model on historical data
+python src/eval.py \
+    --model models/AAPL_model.joblib \
+    --data data/AAPL-2020-01-01-2024-12-31.csv \
+    --start 2023-01-01 \
+    --end 2024-12-31 \
+    --plot
+
+# Or use the example script
+python scripts/backtest_example.py \
+    --model models/AAPL_model.joblib \
+    --data data/AAPL-2020-01-01-2024-12-31.csv \
+    --plot
+```
+
 ### Running Streamlit App
 
 ```bash
@@ -88,44 +106,56 @@ The app will be available at `http://localhost:8501`
 
 ## AWS Deployment
 
-### Prerequisites
+**📖 For complete deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md)**
 
-- AWS S3 bucket created
-- EC2 instance with IAM role having S3 read/write permissions
-- SSH access to EC2 instance
+### Quick Start
 
-### EC2 Bootstrap
+1. **Create S3 Bucket**
+   ```bash
+   aws s3 mb s3://your-stock-models-bucket --region us-east-1
+   ```
 
-The `infra/ec2-user-data.sh` script will:
-- Install Python 3, pip, nginx, git
-- Clone repository
-- Create virtual environment
-- Install dependencies
-- Configure systemd service for Streamlit
+2. **Launch EC2 Instance**
+   - AMI: Ubuntu 22.04 LTS
+   - Instance Type: t3.medium or larger
+   - IAM Role: Attach role with S3 permissions
+   - User Data: Paste contents of `infra/ec2-user-data.sh`
+   - Security Group: Allow ports 22, 80, 443, 8501
+
+3. **SSH and Configure**
+   ```bash
+   ssh -i your-key.pem ubuntu@<EC2_IP>
+   cd ~/stock-trend-mvp
+   # Follow manual setup in DEPLOYMENT.md if user-data didn't run
+   ```
+
+4. **Set Environment Variables**
+   ```bash
+   export S3_BUCKET="your-stock-models-bucket"
+   export AWS_DEFAULT_REGION="us-east-1"
+   ```
+
+5. **Configure Nginx** (see `infra/nginx.conf`)
+
+6. **Set Up Daily Retraining**
+   ```bash
+   crontab -e
+   # Add: 0 2 * * * /home/ubuntu/stock-trend-mvp/scripts/daily_retrain.sh >> /var/log/stock-trend/retrain.log 2>&1
+   ```
 
 ### Deploy Updates
 
 ```bash
-ssh ubuntu@EC2_IP 'cd ~/stock-trend-mvp && git pull && source venv/bin/activate && pip install -r requirements.txt && sudo systemctl restart streamlit-app'
+# Using deploy script
+./deploy/deploy.sh <EC2_IP>
+
+# Or manually
+ssh ubuntu@<EC2_IP> 'cd ~/stock-trend-mvp && git pull && source venv/bin/activate && pip install -r requirements.txt && sudo systemctl restart streamlit-app'
 ```
 
-Or use the deploy script:
+### Deployment Checklist
 
-```bash
-./deploy/deploy.sh EC2_IP
-```
-
-### Daily Retraining
-
-The `scripts/daily_retrain.sh` script runs as a cron job:
-- Downloads latest data
-- Retrains model
-- Uploads updated model to S3
-
-Add to crontab:
-```bash
-0 2 * * * /home/ubuntu/stock-trend-mvp/scripts/daily_retrain.sh >> /var/log/stock-trend/retrain.log 2>&1
-```
+See [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md) for complete checklist.
 
 ## Environment Variables
 

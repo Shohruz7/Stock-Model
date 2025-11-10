@@ -248,19 +248,48 @@ def train_model(
     print("\nTop 10 Most Important Features:")
     print(feature_importance.head(10).to_string(index=False))
 
+    # Optional: Run backtest on test set for additional metrics
+    backtest_metrics = None
+    try:
+        from eval import backtest_model, calculate_returns, calculate_metrics
+        
+        # Create test data DataFrame for backtesting
+        test_data = df.iloc[split_idx:].copy().reset_index(drop=True)
+        if len(test_data) > 0:
+            # Recompute features for test data (needed for backtesting)
+            X_test_features, _ = compute_features(test_data)
+            if len(X_test_features) > 0:
+                # Get predictions for backtesting
+                test_predictions = pd.Series(y_test_pred, index=X_test_features.index)
+                test_prices = test_data["Close"].iloc[-len(test_predictions):].values
+                test_prices_series = pd.Series(test_prices, index=X_test_features.index)
+                
+                # Calculate returns
+                returns_df = calculate_returns(
+                    test_predictions, test_prices_series, initial_capital=10000.0
+                )
+                backtest_metrics = calculate_metrics(returns_df)
+    except Exception as e:
+        print(f"Note: Could not compute backtest metrics: {str(e)}")
+
     # Create metadata
+    additional_info = {
+        "train_accuracy": float(train_accuracy),
+        "n_estimators": n_estimators,
+        "random_state": random_state,
+        "top_features": feature_importance.head(5)["feature"].tolist(),
+    }
+    
+    if backtest_metrics:
+        additional_info["backtest_metrics"] = backtest_metrics
+    
     metadata = create_metadata(
         ticker=ticker,
         accuracy=test_accuracy,
         train_size=len(X_train),
         test_size=len(X_test),
         feature_count=len(X.columns),
-        additional_info={
-            "train_accuracy": float(train_accuracy),
-            "n_estimators": n_estimators,
-            "random_state": random_state,
-            "top_features": feature_importance.head(5)["feature"].tolist(),
-        },
+        additional_info=additional_info,
     )
 
     # Save model artifact

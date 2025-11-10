@@ -49,3 +49,7 @@ Thumbs.db
 .coverage
 htmlcov/
 
+DEPLOYMENT.md
+DEPLOYMENT_CHECKLIST.md
+PROJECT_STATUS.md
+
