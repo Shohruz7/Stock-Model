@@ -74,7 +74,11 @@ def train_model(
     """
     # Load data
     if not os.path.exists(data_path):
-        raise FileNotFoundError(f"Data file not found: {data_path}")
+        raise FileNotFoundError(
+            f"❌ Data file not found: {data_path}\n"
+            f"Please ensure the file exists. You may need to download data first using:\n"
+            f"  python src/data_fetch.py --ticker TICKER --start YYYY-MM-DD --end YYYY-MM-DD --out data/"
+        )
 
     print(f"Loading data from {data_path}...")
     df = pd.read_csv(data_path)
@@ -89,9 +93,26 @@ def train_model(
     print(f"Processing data for ticker: {ticker}")
     print(f"Data shape: {df.shape}")
 
+    # Validate data quality
+    if len(df) < 50:
+        raise ValueError(
+            f"❌ Insufficient data: Only {len(df)} rows available. "
+            f"Need at least 50 rows for reliable model training. "
+            f"Please download more historical data."
+        )
+
     # Compute features
     print("Computing features...")
-    X, y = compute_features(df)
+    try:
+        X, y = compute_features(df)
+    except Exception as e:
+        raise ValueError(
+            f"❌ Error computing features: {str(e)}\n"
+            f"This may indicate data quality issues. Please check:\n"
+            f"- Data has required columns: date, Open, High, Low, Close, Volume\n"
+            f"- No excessive missing values\n"
+            f"- At least 26 days of data available"
+        )
 
     print(f"Features shape: {X.shape}")
     print(f"Target distribution: {y.value_counts().to_dict()}")

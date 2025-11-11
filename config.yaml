@@ -1,0 +1,72 @@
+# Stock Trend Predictor Configuration
+
+# AWS Configuration
+aws:
+  region: "us-east-1"
+  s3_bucket: ""  # Set via environment variable or override
+  s3_prefixes:
+    raw: "raw/"
+    processed: "processed/"
+    models: "models/"
+    metadata: "metadata/"
+
+# Model Configuration
+model:
+  default_estimators: 300
+  default_test_size: 0.2
+  random_state: 42
+  tune_hyperparameters: true
+  default_model_type: "RandomForestClassifier"  # Options: RandomForestClassifier, GradientBoostingClassifier, XGBoost
+
+# Feature Engineering
+features:
+  rsi_period: 14
+  min_data_points: 26  # Minimum rows needed for all features
+  target_threshold: 0.005  # 0.5% threshold for target variable
+
+# Data Configuration
+data:
+  default_lookback_days: 730  # 2 years default
+  date_format: "%Y-%m-%d"
+  timezone: "UTC"
+
+# Backtesting Configuration
+backtesting:
+  initial_capital: 10000.0
+  transaction_cost: 0.001  # 0.1% transaction cost
+  train_window: 252  # 1 year for walk-forward
+  test_window: 63  # ~3 months for walk-forward
+  step: 21  # ~1 month step
+
+# Streamlit Configuration
+streamlit:
+  port: 8501
+  host: "0.0.0.0"
+  theme:
+    primary_color: "#1f77b4"
+    background_color: "#ffffff"
+    secondary_background_color: "#f0f2f6"
+
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_dir: "/var/log/stock-trend"
+  log_files:
+    app: "streamlit.log"
+    error: "streamlit.error.log"
+    retrain: "retrain.log"
+    retrain_error: "retrain.error.log"
+
+# Tickers Configuration
+tickers:
+  default_ticker: "AAPL"
+  watchlist: ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA"]
+
+# Performance Thresholds
+performance:
+  min_accuracy: 0.55  # Minimum acceptable accuracy
+  target_accuracy: 0.70  # Target accuracy goal
+  min_sharpe_ratio: 1.0  # Minimum acceptable Sharpe ratio
+
+
+

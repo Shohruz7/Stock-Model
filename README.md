@@ -10,6 +10,56 @@ A model that predicts next-day stock price direction using yfinance data, scikit
 - **Deployment**: Single EC2 instance with systemd service
 - **Retraining**: Daily cron job updates production model
 
+## Architecture
+
+```mermaid
+graph TB
+    subgraph "Data Pipeline"
+        YF[yfinance API] -->|Download OHLCV| DF[Data Fetch]
+        DF -->|CSV Files| S3_RAW[(S3: raw/)]
+        DF -->|Local Storage| LOCAL_DATA[data/]
+    end
+
+    subgraph "ML Pipeline"
+        LOCAL_DATA -->|Load CSV| FEAT[Feature Engineering<br/>39 Technical Indicators]
+        FEAT -->|X, y| TRAIN[Model Training<br/>RandomForestClassifier]
+        TRAIN -->|Model Artifact| MODEL_SAVE[Save Model<br/>joblib format]
+        MODEL_SAVE -->|Upload| S3_MODELS[(S3: models/)]
+        MODEL_SAVE -->|Local| LOCAL_MODELS[models/]
+    end
+
+    subgraph "AWS EC2 Instance"
+        subgraph "Streamlit App"
+            UI[Streamlit UI<br/>Port 8501]
+            UI -->|Load Model| LOCAL_MODELS
+            UI -->|Load Model| S3_MODELS
+            UI -->|Fetch Data| YF
+            UI -->|Predict| PRED[Next-Day Prediction]
+            UI -->|Backtest| BACKTEST[Backtesting Engine]
+        end
+        
+        CRON[Daily Cron Job<br/>2 AM UTC] -->|Retrain| TRAIN
+        CRON -->|Download| S3_RAW
+        CRON -->|Upload| S3_MODELS
+        
+        NGINX[Nginx<br/>Reverse Proxy] -->|Port 80/443| UI
+    end
+
+    subgraph "User Interaction"
+        USER[User Browser] -->|HTTP/HTTPS| NGINX
+        USER -->|View Predictions| PRED
+        USER -->|View Results| BACKTEST
+    end
+
+    style YF fill:#e1f5ff
+    style S3_RAW fill:#fff4e1
+    style S3_MODELS fill:#fff4e1
+    style TRAIN fill:#e8f5e9
+    style UI fill:#f3e5f5
+    style PRED fill:#ffebee
+    style BACKTEST fill:#ffebee
+```
+
 ## Repository Structure
 
 ```
@@ -103,6 +153,9 @@ The app will be available at `http://localhost:8501`
 - View historical price charts
 - See computed features
 - Make next-day predictions with probabilities
+- Backtesting with performance metrics and visualizations
+- Model comparison across multiple models
+- Prediction history tracking with CSV export
 
 ## AWS Deployment
 
@@ -149,8 +202,6 @@ The app will be available at `http://localhost:8501`
 # Using deploy script
 ./deploy/deploy.sh <EC2_IP>
 
-# Or manually
-ssh ubuntu@<EC2_IP> 'cd ~/stock-trend-mvp && git pull && source venv/bin/activate && pip install -r requirements.txt && sudo systemctl restart streamlit-app'
 ```
 
 ### Deployment Checklist

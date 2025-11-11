@@ -55,6 +55,8 @@ if "model_info" not in st.session_state:
     st.session_state.model_info = None
 if "models" not in st.session_state:
     st.session_state.models = []  # For model comparison
+if "prediction_history" not in st.session_state:
+    st.session_state.prediction_history = []  # Store predictions with timestamps
 
 # Model loading options
 st.sidebar.subheader("Model")
@@ -135,7 +137,7 @@ if len(st.session_state.models) > 0:
         st.sidebar.success("✅ Comparison models cleared")
 
 # Main tabs
-tab1, tab2, tab3 = st.tabs(["🔮 Prediction", "📊 Backtesting", "⚖️ Model Comparison"])
+tab1, tab2, tab3, tab4 = st.tabs(["🔮 Prediction", "📊 Backtesting", "⚖️ Model Comparison", "📜 Prediction History"])
 
 # ===== TAB 1: PREDICTION =====
 with tab1:
@@ -298,8 +300,58 @@ with tab1:
                                 f"Based on {len(df)} days of historical data."
                             )
 
+                            # Save to prediction history
+                            latest_price = df["Close"].iloc[-1]
+                            prediction_record = {
+                                "timestamp": datetime.now(),
+                                "ticker": ticker,
+                                "date": df["date"].iloc[-1],
+                                "current_price": latest_price,
+                                "prediction": prediction,
+                                "probability": probability,
+                                "prob_up": probabilities["Up"],
+                                "prob_down": probabilities["Down"],
+                                "model_ticker": st.session_state.model_info["ticker"],
+                                "model_accuracy": st.session_state.model_info["accuracy"],
+                            }
+                            st.session_state.prediction_history.append(prediction_record)
+
                         except Exception as e:
-                            st.error(f"❌ Prediction error: {str(e)}")
+                            error_msg = str(e)
+                            if "Missing feature columns" in error_msg:
+                                st.error(
+                                    f"❌ **Feature Mismatch Error**\n\n"
+                                    f"The model expects different features than what was computed. "
+                                    f"This usually means:\n"
+                                    f"- The model was trained with a different version of the code\n"
+                                    f"- You need to retrain the model with the current feature set\n\n"
+                                    f"**Technical details:** {error_msg}"
+                                )
+                            elif "Insufficient data" in error_msg:
+                                st.error(
+                                    f"❌ **Insufficient Data**\n\n"
+                                    f"Need at least 26 days of data to compute all features. "
+                                    f"Current data: {len(df)} days.\n\n"
+                                    f"**Solution:** Select a longer date range (at least 1 month)."
+                                )
+                            elif "Error computing features" in error_msg:
+                                st.error(
+                                    f"❌ **Feature Computation Error**\n\n"
+                                    f"Failed to compute features from the data. "
+                                    f"This may indicate data quality issues.\n\n"
+                                    f"**Technical details:** {error_msg}\n\n"
+                                    f"**Solution:** Try downloading fresh data or check for missing values."
+                                )
+                            else:
+                                st.error(
+                                    f"❌ **Prediction Error**\n\n"
+                                    f"An unexpected error occurred while making the prediction.\n\n"
+                                    f"**Error:** {error_msg}\n\n"
+                                    f"**Troubleshooting:**\n"
+                                    f"- Ensure the model is properly loaded\n"
+                                    f"- Verify data has all required columns (date, Open, High, Low, Close, Volume)\n"
+                                    f"- Check that data has at least 26 days of history"
+                                )
 
 # ===== TAB 2: BACKTESTING =====
 with tab2:
@@ -525,6 +577,76 @@ with tab3:
                 except Exception as e:
                     st.error(f"❌ Comparison error: {str(e)}")
                     st.exception(e)
+
+# ===== TAB 4: PREDICTION HISTORY =====
+with tab4:
+    st.header("📜 Prediction History")
+
+    if len(st.session_state.prediction_history) == 0:
+        st.info("💡 No predictions made yet. Make predictions in the Prediction tab to see them here.")
+    else:
+        # Convert history to DataFrame
+        history_df = pd.DataFrame(st.session_state.prediction_history)
+        
+        # Display summary
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Predictions", len(history_df))
+        with col2:
+            up_predictions = (history_df["prediction"] == "Up").sum()
+            st.metric("Up Predictions", up_predictions)
+        with col3:
+            avg_confidence = history_df["probability"].mean()
+            st.metric("Avg Confidence", f"{avg_confidence:.2%}")
+
+        st.markdown("---")
+
+        # Display history table
+        st.subheader("Prediction Records")
+        
+        # Format for display
+        display_df = history_df.copy()
+        display_df["timestamp"] = pd.to_datetime(display_df["timestamp"]).dt.strftime("%Y-%m-%d %H:%M:%S")
+        display_df["date"] = pd.to_datetime(display_df["date"]).dt.strftime("%Y-%m-%d")
+        display_df["current_price"] = display_df["current_price"].apply(lambda x: f"${x:.2f}")
+        display_df["probability"] = display_df["probability"].apply(lambda x: f"{x:.2%}")
+        display_df["prob_up"] = display_df["prob_up"].apply(lambda x: f"{x:.2%}")
+        display_df["prob_down"] = display_df["prob_down"].apply(lambda x: f"{x:.2%}")
+        display_df["model_accuracy"] = display_df["model_accuracy"].apply(lambda x: f"{x:.2%}")
+
+        # Rename columns for better display
+        display_df = display_df.rename(columns={
+            "timestamp": "Time",
+            "ticker": "Ticker",
+            "date": "Data Date",
+            "current_price": "Price",
+            "prediction": "Prediction",
+            "probability": "Confidence",
+            "prob_up": "P(Up)",
+            "prob_down": "P(Down)",
+            "model_ticker": "Model",
+            "model_accuracy": "Model Acc",
+        })
+
+        # Select columns to show
+        cols_to_show = ["Time", "Ticker", "Data Date", "Price", "Prediction", "Confidence", "P(Up)", "P(Down)", "Model", "Model Acc"]
+        st.dataframe(display_df[cols_to_show], use_container_width=True, hide_index=True)
+
+        # Export button
+        if st.button("📥 Export to CSV"):
+            csv = history_df.to_csv(index=False)
+            st.download_button(
+                label="Download CSV",
+                data=csv,
+                file_name=f"predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+            )
+
+        # Clear history button
+        if st.button("🗑️ Clear History", type="secondary"):
+            st.session_state.prediction_history = []
+            st.success("✅ Prediction history cleared!")
+            st.rerun()
 
 # Footer
 st.markdown("---")

@@ -73,7 +73,23 @@ def download_daily(
         return filepath
 
     except Exception as e:
-        raise ValueError(f"Error downloading data for {ticker}: {str(e)}")
+        error_msg = str(e)
+        if "No data found" in error_msg or "symbol may be delisted" in error_msg.lower():
+            raise ValueError(
+                f"❌ No data available for ticker '{ticker}'. "
+                f"The ticker may be invalid, delisted, or the date range may be outside available data. "
+                f"Please verify the ticker symbol and try a different date range."
+            )
+        elif "429" in error_msg or "rate limit" in error_msg.lower():
+            raise ValueError(
+                f"❌ Rate limit exceeded. Too many requests to yfinance. "
+                f"Please wait a few minutes and try again, or reduce the number of concurrent requests."
+            )
+        else:
+            raise ValueError(
+                f"❌ Error downloading data for {ticker}: {error_msg}. "
+                f"Please check your internet connection and try again."
+            )
 
 
 def upload_to_s3(
@@ -99,7 +115,10 @@ def upload_to_s3(
         boto3.exceptions.Boto3Error: If S3 upload fails
     """
     if not os.path.exists(local_path):
-        raise FileNotFoundError(f"Local file not found: {local_path}")
+        raise FileNotFoundError(
+            f"❌ Local file not found: {local_path}\n"
+            f"Please ensure the file exists and the path is correct."
+        )
 
     # Initialize S3 client (uses default credentials chain: env vars, IAM role, etc.)
     s3_client = boto3.client("s3", region_name=region)
@@ -112,7 +131,27 @@ def upload_to_s3(
         return s3_uri
 
     except Exception as e:
-        raise Exception(f"Error uploading to S3: {str(e)}")
+        error_msg = str(e)
+        if "AccessDenied" in error_msg or "403" in error_msg:
+            raise Exception(
+                f"❌ S3 Access Denied. Check that:\n"
+                f"- IAM role has S3 write permissions\n"
+                f"- Bucket name is correct: {bucket}\n"
+                f"- Bucket policy allows uploads\n"
+                f"Original error: {error_msg}"
+            )
+        elif "NoCredentialsError" in error_msg or "credentials" in error_msg.lower():
+            raise Exception(
+                f"❌ AWS credentials not found. Ensure:\n"
+                f"- EC2 instance has IAM role attached\n"
+                f"- Or AWS credentials are configured (aws configure)\n"
+                f"Original error: {error_msg}"
+            )
+        else:
+            raise Exception(
+                f"❌ Error uploading to S3: {error_msg}\n"
+                f"Bucket: {bucket}, Key: {s3_key}"
+            )
 
 
 def download_multiple_tickers(
