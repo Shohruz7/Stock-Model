@@ -5,7 +5,7 @@ A model that predicts next-day stock price direction using yfinance data, scikit
 ## Overview
 
 - **Data Source**: yfinance (daily OHLCV)
-- **Model**: RandomForestClassifier for binary classification (up/down)
+- **Models**: RandomForestClassifier, XGBoostClassifier, GradientBoostingClassifier for binary classification (up/down)
 - **Storage**: AWS S3 (raw/, processed/, models/, metadata/)
 - **Deployment**: Single EC2 instance with systemd service
 - **Retraining**: Daily cron job updates production model
@@ -63,31 +63,6 @@ python src/data_fetch.py --tickers-file tickers.txt --start 2018-01-01 --end 202
 ```bash
 # Train model on processed data
 python src/train.py --data data/AAPL-2018-01-01-2024-12-31.csv --out models/
-
-# Train and upload to S3
-python src/train.py \
-    --data data/AAPL-2018-01-01-2024-12-31.csv \
-    --out models/ \
-    --s3-bucket my-stock-models \
-    --s3-key models/production.joblib
-```
-
-### Backtesting
-
-```bash
-# Backtest a model on historical data
-python src/eval.py \
-    --model models/AAPL_model.joblib \
-    --data data/AAPL-2020-01-01-2024-12-31.csv \
-    --start 2023-01-01 \
-    --end 2024-12-31 \
-    --plot
-
-# Or use the example script
-python scripts/backtest_example.py \
-    --model models/AAPL_model.joblib \
-    --data data/AAPL-2020-01-01-2024-12-31.csv \
-    --plot
 ```
 
 ### Running Streamlit App
@@ -98,66 +73,46 @@ streamlit run app/streamlit_app.py
 
 The app will be available at `http://localhost:8501`
 
-**Features:**
-- Load models from local files or S3
-- Download stock data for any ticker
-- View historical price charts
-- See computed features
-- Make next-day predictions with probabilities
-- Backtesting with performance metrics and visualizations
-- Model comparison across multiple models
-- Prediction history tracking with CSV export
-
 ## AWS Deployment
 
-**📖 For complete deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md)**
+### Prerequisites
 
-### Quick Start
+- AWS S3 bucket created
+- EC2 instance with IAM role having S3 read/write permissions
+- SSH access to EC2 instance
 
-1. **Create S3 Bucket**
-   ```bash
-   aws s3 mb s3://your-stock-models-bucket --region us-east-1
-   ```
+### EC2 Bootstrap
 
-2. **Launch EC2 Instance**
-   - AMI: Ubuntu 22.04 LTS
-   - Instance Type: t3.medium or larger
-   - IAM Role: Attach role with S3 permissions
-   - User Data: Paste contents of `infra/ec2-user-data.sh`
-   - Security Group: Allow ports 22, 80, 443, 8501
-
-3. **SSH and Configure**
-   ```bash
-   ssh -i your-key.pem ubuntu@<EC2_IP>
-   cd ~/stock-trend-mvp
-   # Follow manual setup in DEPLOYMENT.md if user-data didn't run
-   ```
-
-4. **Set Environment Variables**
-   ```bash
-   export S3_BUCKET="your-stock-models-bucket"
-   export AWS_DEFAULT_REGION="us-east-1"
-   ```
-
-5. **Configure Nginx** (see `infra/nginx.conf`)
-
-6. **Set Up Daily Retraining**
-   ```bash
-   crontab -e
-   # Add: 0 2 * * * /home/ubuntu/stock-trend-mvp/scripts/daily_retrain.sh >> /var/log/stock-trend/retrain.log 2>&1
-   ```
+The `infra/ec2-user-data.sh` script will:
+- Install Python 3, pip, nginx, git
+- Clone repository
+- Create virtual environment
+- Install dependencies
+- Configure systemd service for Streamlit
 
 ### Deploy Updates
 
 ```bash
-# Using deploy script
-./deploy/deploy.sh <EC2_IP>
-
+ssh ubuntu@EC2_IP 'cd ~/stock-trend-mvp && git pull && source venv/bin/activate && pip install -r requirements.txt && sudo systemctl restart streamlit-app'
 ```
 
-### Deployment Checklist
+Or use the deploy script:
 
-See [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md) for complete checklist.
+```bash
+./deploy/deploy.sh EC2_IP
+```
+
+### Daily Retraining
+
+The `scripts/daily_retrain.sh` script runs as a cron job:
+- Downloads latest data
+- Retrains model
+- Uploads updated model to S3
+
+Add to crontab:
+```bash
+0 2 * * * /home/ubuntu/stock-trend-mvp/scripts/daily_retrain.sh >> /var/log/stock-trend/retrain.log 2>&1
+```
 
 ## Environment Variables
 

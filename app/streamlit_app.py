@@ -124,6 +124,8 @@ if st.session_state.model_info:
     st.sidebar.markdown("---")
     st.sidebar.subheader("Model Information")
     st.sidebar.metric("Ticker", st.session_state.model_info["ticker"])
+    model_type = st.session_state.model_info.get("model_type", "Unknown")
+    st.sidebar.metric("Model Type", model_type.replace("_", " ").title())
     st.sidebar.metric("Test Accuracy", f"{st.session_state.model_info['accuracy']:.2%}")
     st.sidebar.metric("Train Accuracy", f"{st.session_state.model_info['train_accuracy']:.2%}")
     st.sidebar.caption(f"Trained: {st.session_state.model_info['training_date']}")
@@ -500,10 +502,12 @@ with tab3:
         comparison_data = []
         for i, model_data in enumerate(st.session_state.models):
             info = model_data["info"]
+            model_type = info.get("model_type", "Unknown")
             comparison_data.append(
                 {
                     "Model": f"Model {i+1} ({info['ticker']})",
                     "Ticker": info["ticker"],
+                    "Model Type": model_type.replace("_", " ").title(),
                     "Accuracy": info["accuracy"],
                     "Train Accuracy": info["train_accuracy"],
                     "Features": info["feature_count"],
@@ -522,7 +526,10 @@ with tab3:
 
                     data = st.session_state["data"].copy()
                     artifacts = [m["artifact"] for m in st.session_state.models]
-                    names = [f"{m['info']['ticker']} Model" for m in st.session_state.models]
+                    names = [
+                        f"{m['info']['ticker']} ({m['info'].get('model_type', 'Unknown').replace('_', ' ').title()})"
+                        for m in st.session_state.models
+                    ]
 
                     comparison_results = compare_models(artifacts, names, data)
 
